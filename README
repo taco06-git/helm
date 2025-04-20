@@ -1,0 +1,80 @@
+
+
+running a cluster of ubuntu 20.
+
+step 1: 
+helm repo add bitnami https://charts.bitnami.com/bitnami
+
+step2: 
+helm install my-mysql bitnami/mysql --version 12.3.4
+
+step 3:
+k get po -----> pending
+k get pvc ---> not bound
+k get po ----> pv not created 
+k get sc ----->  storage class not created 
+
+
+step 4. 
+# install storage class 
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+
+k get sc ---> done
+kubectl get sc
+NAME                   PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+local-path         rancher.io/local-path       Delete          WaitForFirstConsumer   false                  10m
+
+k get pvc ---> still not bound
+k get pv ---> still not created 
+
+step 5. obeservation after troubleshooting. storage class local-path is not default
+how to make it default . there are two ways 
+
+First way is to patch :
+kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+
+second way : 
+download the helm package 
+$ helm pull oci://registry-1.docker.io/bitnamicharts/mysql --version 12.3.4
+$ ls 
+mysql-12.3.4.tgz 
+# extract mysql-12.3.4.tgz 
+$ tar -xzvf mysql-12.3.4.tgz 
+
+# download the manifest of local-path storage class and copy it inside the template folder
+$ wget  https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+
+# copy it inside the template folder inside helm 
+$ mv local-path-storage.yaml mysql/templates
+
+# Update the annotations 
+$ vi mysql/templates/local-path-storage.yaml
+##  find the storageclass section and update   
+##  annotations:
+##       storageclass.kubernetes.io/is-default-class: "true"
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-path
+  annotations:
+     storageclass.kubernetes.io/is-default-class: "true"
+provisioner: rancher.io/local-path
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+
+:wq save and exit 
+
+## Now install the chart 
+
+$ helm install my-mysql mysql/
+
+$ k get po,pvc,pv,sc  ---> success
+
+
+
+
+
+
+
+
